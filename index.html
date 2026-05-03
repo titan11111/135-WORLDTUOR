@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>World Treasure Hunter</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700&family=Noto+Sans+JP:wght@400;700&display=swap');
+        
+        body {
+            font-family: 'Noto Sans JP', sans-serif;
+            background-color: #1a1a1a;
+            color: #e5e7eb;
+            overflow-x: hidden;
+        }
+
+        .cinzel {
+            font-family: 'Cinzel', serif;
+        }
+
+        .world-map {
+            background: radial-gradient(circle, #2a2a2a 0%, #1a1a1a 100%);
+            position: relative;
+            height: 400px;
+            border-radius: 1rem;
+            border: 2px solid #4a3f28;
+            overflow: hidden;
+        }
+
+        .city-node {
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }
+
+        .city-node:hover {
+            transform: scale(1.2);
+            filter: drop-shadow(0 0 8px #fbbf24);
+        }
+
+        .treasure-card {
+            background: linear-gradient(135deg, #2d2618 0%, #1a160d 100%);
+            border: 1px solid #d4af37;
+        }
+
+        .animate-pulse-slow {
+            animation: pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+
+        .game-btn {
+            -webkit-tap-highlight-color: transparent;
+            transition: transform 0.08s ease, opacity 0.08s ease;
+        }
+
+        .game-btn:active {
+            transform: scale(0.95);
+            opacity: 0.9;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: .5; }
+        }
+
+        /* Modal styling */
+        .modal-overlay {
+            background: rgba(0, 0, 0, 0.85);
+            backdrop-filter: blur(4px);
+        }
+    </style>
+</head>
+<body class="p-4 md:p-8">
+
+    <div id="game-container" class="max-w-4xl mx-auto">
+        <!-- Header -->
+        <header class="flex justify-between items-center mb-6">
+            <div>
+                <h1 class="text-3xl font-bold cinzel text-amber-500">World Treasure Hunter</h1>
+                <p class="text-sm text-gray-400">伝説の秘宝を求めて世界を巡れ</p>
+            </div>
+            <div class="text-right">
+                <div class="flex items-center space-x-2 justify-end">
+                    <span class="text-amber-200">Energy:</span>
+                    <div id="energy-bar" class="w-32 h-4 bg-gray-700 rounded-full overflow-hidden border border-gray-600">
+                        <div id="energy-fill" class="h-full bg-green-500 transition-all duration-500" style="width: 100%"></div>
+                    </div>
+                </div>
+                <div class="flex items-center space-x-2 justify-end mt-2">
+                    <span class="text-amber-200">Alert:</span>
+                    <div id="alert-bar" class="w-32 h-4 bg-gray-700 rounded-full overflow-hidden border border-gray-600">
+                        <div id="alert-fill" class="h-full bg-blue-500 transition-all duration-500" style="width: 0%"></div>
+                    </div>
+                </div>
+                <p id="money-display" class="text-xl font-bold text-yellow-400 mt-1">G: 1,000</p>
+            </div>
+        </header>
+
+        <!-- World Map Area -->
+        <div class="world-map mb-8 relative" id="map-container">
+            <div class="absolute inset-0 opacity-20 pointer-events-none">
+                <!-- Simple SVG World Map Outline for visual flavor -->
+                <svg viewBox="0 0 800 400" xmlns="http://www.w3.org/2000/svg" class="w-full h-full">
+                    <path d="M150,100 Q180,50 250,80 T350,120 T450,100 T550,150 T650,100 T750,180 T650,280 T450,320 T250,300 T150,250 Z" fill="#444" />
+                </svg>
+            </div>
+            <div id="cities-layer"></div>
+        </div>
+
+        <!-- Dashboard -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <!-- Travel/Info -->
+            <div class="md:col-span-2 bg-gray-800 p-6 rounded-xl border border-gray-700">
+                <h2 id="current-city-name" class="text-2xl font-bold mb-2 text-amber-400">現在地: 東京</h2>
+                <p id="current-city-desc" class="text-gray-300 mb-4">日本の首都。ハイテクと伝統が共存する都市。</p>
+                <p id="clue-progress" class="text-sm text-amber-200 mb-4">手がかり進捗: 0 / 3</p>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    <button data-explore-mode="interview" class="game-btn bg-sky-600 hover:bg-sky-700 text-white font-bold py-3 px-4 rounded-lg shadow-lg">
+                        聞き込み
+                        <span class="block text-xs font-normal mt-1">-10 Energy / 成功率 45%</span>
+                    </button>
+                    <button data-explore-mode="infiltration" class="game-btn bg-rose-600 hover:bg-rose-700 text-white font-bold py-3 px-4 rounded-lg shadow-lg">
+                        潜入
+                        <span class="block text-xs font-normal mt-1">-25 Energy / 成功率 75%</span>
+                    </button>
+                    <button data-explore-mode="rest" class="game-btn bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 px-4 rounded-lg shadow-lg">
+                        休息付き探索
+                        <span class="block text-xs font-normal mt-1">-15 Energy / 成功率 60%</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Inventory Summary -->
+            <div class="bg-gray-800 p-6 rounded-xl border border-gray-700">
+                <h3 class="text-lg font-bold mb-4 flex items-center">
+                    <span class="mr-2">🏆</span> コレクション
+                </h3>
+                <div id="collection-count" class="text-3xl font-bold text-yellow-500 mb-2">0 / 8</div>
+                <p class="text-sm text-gray-400">手に入れた秘宝の数</p>
+                <button id="show-collection-btn" class="mt-4 w-full text-xs text-amber-500 border border-amber-500 py-1 rounded hover:bg-amber-500 hover:text-black transition">
+                    詳細を見る
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modals -->
+    <div id="modal" class="fixed inset-0 modal-overlay hidden flex items-center justify-center p-4 z-50">
+        <div class="bg-gray-900 border-2 border-amber-600 p-8 rounded-2xl max-w-md w-full shadow-2xl transform transition-all scale-100">
+            <div id="modal-content" class="text-center">
+                <!-- Dynamic Content -->
+            </div>
+            <button id="modal-close" class="mt-6 w-full bg-amber-600 hover:bg-amber-700 text-white font-bold py-2 rounded">
+                閉じる
+            </button>
+        </div>
+    </div>
+
+    <script>
+        // Game Data
+        const cities = [
+            { id: 'tokyo', name: '東京', x: 720, y: 150, desc: '日本の首都。古い神社と高層ビルが混在する。', treasure: { name: '草薙の剣', rarity: 'Legendary', found: false, clueProgress: 0 } },
+            { id: 'cairo', name: 'カイロ', x: 450, y: 180, desc: 'ピラミッドがそびえ立つ砂漠の入り口。', treasure: { name: '黄金のマスク', rarity: 'Epic', found: false, clueProgress: 0 } },
+            { id: 'paris', name: 'パリ', x: 380, y: 110, desc: '芸術と歴史の都。地下には巨大な墓地がある。', treasure: { name: 'ナポレオンの宝剣', rarity: 'Rare', found: false, clueProgress: 0 } },
+            { id: 'machu_picchu', name: 'マチュピチュ', x: 220, y: 280, desc: '天空に浮かぶインカの遺跡。', treasure: { name: '太陽の黄金像', rarity: 'Legendary', found: false, clueProgress: 0 } },
+            { id: 'london', name: 'ロンドン', x: 370, y: 80, desc: '霧深い大英帝国の中心地。', treasure: { name: 'アーサー王の聖杯', rarity: 'Epic', found: false, clueProgress: 0 } },
+            { id: 'athens', name: 'アテネ', x: 420, y: 140, desc: '古代ギリシャの知恵が眠る聖域。', treasure: { name: 'ゼウスの雷', rarity: 'Legendary', found: false, clueProgress: 0 } },
+            { id: 'beijing', name: '北京', x: 650, y: 140, desc: '壮大な万里の長城と紫禁城。', treasure: { name: '始皇帝の玉璽', rarity: 'Epic', found: false, clueProgress: 0 } },
+            { id: 'delhi', name: 'デリー', x: 580, y: 190, desc: '神秘的な寺院が数多く存在する。', treasure: { name: 'マハラジャのダイヤモンド', rarity: 'Rare', found: false, clueProgress: 0 } }
+        ];
+
+        const exploreModes = {
+            interview: {
+                label: '聞き込み',
+                cost: 10,
+                successRate: 0.45,
+                alertGain: 5
+            },
+            infiltration: {
+                label: '潜入',
+                cost: 25,
+                successRate: 0.75,
+                alertGain: 10
+            },
+            rest: {
+                label: '休息付き探索',
+                cost: 15,
+                successRate: 0.6,
+                alertGain: 5
+            }
+        };
+
+        // Game State
+        let gameState = {
+            energy: 100,
+            maxEnergy: 100,
+            money: 1000,
+            alertLevel: 0,
+            currentCity: cities[0],
+            collection: []
+        };
+
+        // DOM Elements
+        const energyFill = document.getElementById('energy-fill');
+        const alertFill = document.getElementById('alert-fill');
+        const moneyDisplay = document.getElementById('money-display');
+        const cityNameDisp = document.getElementById('current-city-name');
+        const cityDescDisp = document.getElementById('current-city-desc');
+        const clueProgressDisp = document.getElementById('clue-progress');
+        const citiesLayer = document.getElementById('cities-layer');
+        const exploreButtons = document.querySelectorAll('[data-explore-mode]');
+        const modal = document.getElementById('modal');
+        const modalContent = document.getElementById('modal-content');
+        const modalClose = document.getElementById('modal-close');
+        const collectionCount = document.getElementById('collection-count');
+        const showCollectionBtn = document.getElementById('show-collection-btn');
+
+        // Functions
+        function initMap() {
+            cities.forEach(city => {
+                const node = document.createElement('div');
+                node.className = 'city-node absolute w-6 h-6 bg-amber-500 rounded-full border-2 border-white flex items-center justify-center';
+                node.style.left = `${(city.x / 800) * 100}%`;
+                node.style.top = `${(city.y / 400) * 100}%`;
+                node.title = city.name;
+                
+                node.innerHTML = `<span class="absolute -top-6 left-1/2 -translate-x-1/2 whitespace-nowrap text-xs font-bold text-white bg-black bg-opacity-50 px-1 rounded">${city.name}</span>`;
+                
+                node.onclick = () => travelTo(city);
+                citiesLayer.appendChild(node);
+            });
+            updateUI();
+        }
+
+        function travelTo(city) {
+            if (gameState.currentCity.id === city.id) return;
+            
+            const cost = 10;
+            if (gameState.energy < cost) {
+                showMessage("エネルギー不足！", "少し休みが必要です。");
+                return;
+            }
+
+            gameState.energy -= cost;
+            gameState.currentCity = city;
+            const pursuitEvent = raiseAlert(5);
+            updateUI();
+            showMessage(`${city.name}に到着しました`, `${city.desc}${formatPursuitText(pursuitEvent)}`);
+        }
+
+        function raiseAlert(amount) {
+            gameState.alertLevel = Math.min(100, gameState.alertLevel + amount);
+            return resolvePursuitIfNeeded();
+        }
+
+        function resolvePursuitIfNeeded() {
+            if (gameState.alertLevel < 70) {
+                return null;
+            }
+
+            const energyLoss = Math.min(gameState.energy, Math.floor(Math.random() * 12) + 8);
+            const moneyLoss = Math.min(gameState.money, Math.floor(Math.random() * 180) + 120);
+
+            gameState.energy = Math.max(0, gameState.energy - energyLoss);
+            gameState.money = Math.max(0, gameState.money - moneyLoss);
+            gameState.alertLevel = 25;
+
+            return { energyLoss, moneyLoss };
+        }
+
+        function explore(mode) {
+            const config = exploreModes[mode];
+            const cost = config.cost;
+            if (gameState.energy < cost) {
+                showMessage("エネルギー不足！", "探索を続ける体力がありません。");
+                return;
+            }
+
+            gameState.energy -= cost;
+            const rand = Math.random();
+            const city = gameState.currentCity;
+            const pursuitEvent = raiseAlert(config.alertGain);
+
+            if (!city.treasure.found && rand < config.successRate) {
+                city.treasure.clueProgress += 1;
+
+                if (city.treasure.clueProgress >= 3) {
+                    city.treasure.found = true;
+                    gameState.collection.push({...city.treasure, origin: city.name});
+                    showTreasureFound(city.treasure, config.label, pursuitEvent);
+                } else {
+                    showClueFound(city, config.label, pursuitEvent);
+                }
+            } else if (rand > 0.25) {
+                const foundMoney = Math.floor(Math.random() * 200) + 50;
+                gameState.money += foundMoney;
+                showMessage(
+                    "貴重なコインを発見！",
+                    `${config.label}で ${foundMoney} ゴールドを手に入れました。${formatPursuitText(pursuitEvent)}`
+                );
+            } else {
+                showMessage(
+                    "何も見つからなかった...",
+                    `${config.label}を続けましたが、決定打はありません。${formatPursuitText(pursuitEvent)}`
+                );
+            }
+
+            updateUI();
+        }
+
+        function updateUI() {
+            energyFill.style.width = `${gameState.energy}%`;
+            alertFill.style.width = `${gameState.alertLevel}%`;
+            alertFill.className = 'h-full transition-all duration-500';
+            if (gameState.alertLevel >= 70) {
+                alertFill.classList.add('bg-red-500');
+            } else if (gameState.alertLevel >= 40) {
+                alertFill.classList.add('bg-orange-500');
+            } else {
+                alertFill.classList.add('bg-blue-500');
+            }
+            moneyDisplay.innerText = `G: ${gameState.money.toLocaleString()}`;
+            cityNameDisp.innerText = `現在地: ${gameState.currentCity.name}`;
+            cityDescDisp.innerText = gameState.currentCity.desc;
+            clueProgressDisp.innerText = gameState.currentCity.treasure.found
+                ? '手がかり進捗: COMPLETE'
+                : `手がかり進捗: ${gameState.currentCity.treasure.clueProgress} / 3`;
+            collectionCount.innerText = `${gameState.collection.length} / ${cities.length}`;
+
+            // Pulse effect for current city
+            document.querySelectorAll('.city-node').forEach(node => {
+                node.classList.remove('bg-red-500', 'animate-pulse');
+                if (node.title === gameState.currentCity.name) {
+                    node.classList.add('bg-red-500', 'animate-pulse');
+                }
+            });
+        }
+
+        function showMessage(title, text) {
+            modalContent.innerHTML = `
+                <h2 class="text-2xl font-bold text-amber-500 mb-2">${title}</h2>
+                <p class="text-gray-300">${text}</p>
+            `;
+            modal.classList.remove('hidden');
+        }
+
+        function formatPursuitText(pursuitEvent) {
+            if (!pursuitEvent) {
+                return '';
+            }
+            return ` ですが追っ手に見つかり、Energyを ${pursuitEvent.energyLoss}、所持金を ${pursuitEvent.moneyLoss} 失いました。`;
+        }
+
+        function showClueFound(city, modeLabel, pursuitEvent) {
+            modalContent.innerHTML = `
+                <div class="mb-4 text-5xl">🧭</div>
+                <h2 class="text-2xl font-bold text-amber-500 mb-2">手がかり発見</h2>
+                <p class="text-gray-300 mb-3">${modeLabel}の成果で、<span class="text-amber-300 font-bold">${city.treasure.name}</span>の痕跡を追いました。</p>
+                <p class="text-lg font-bold text-yellow-400 mb-2">進捗 ${city.treasure.clueProgress} / 3</p>
+                <p class="text-sm text-gray-400">あと少しで秘宝の在り処に届きます。${pursuitEvent ? `追っ手出現で Energy -${pursuitEvent.energyLoss} / G -${pursuitEvent.moneyLoss}` : ''}</p>
+            `;
+            modal.classList.remove('hidden');
+        }
+
+        function showTreasureFound(treasure, modeLabel, pursuitEvent) {
+            modalContent.innerHTML = `
+                <div class="mb-4 text-6xl">🏺</div>
+                <h2 class="text-3xl font-bold text-yellow-400 cinzel mb-2">秘宝発見！</h2>
+                <div class="treasure-card p-4 rounded-lg mb-4">
+                    <h3 class="text-xl font-bold text-white">${treasure.name}</h3>
+                    <p class="text-sm text-amber-500 font-bold uppercase tracking-widest">${treasure.rarity}</p>
+                </div>
+                <p class="text-gray-300">${modeLabel}の末に、歴史的な価値のある秘宝があなたのコレクションに加わりました！</p>
+                <p class="text-sm text-gray-400 mt-2">${pursuitEvent ? `ただし追っ手出現。Energy -${pursuitEvent.energyLoss} / G -${pursuitEvent.moneyLoss}` : '今回はまだ追っ手に気取られていません。'}</p>
+            `;
+            modal.classList.remove('hidden');
+        }
+
+        function showCollection() {
+            if (gameState.collection.length === 0) {
+                showMessage("コレクション", "まだ秘宝を見つけていません。世界中を探索しましょう！");
+                return;
+            }
+
+            let listHtml = gameState.collection.map(item => `
+                <div class="flex justify-between items-center p-2 border-b border-gray-700">
+                    <div class="text-left">
+                        <div class="font-bold text-amber-200">${item.name}</div>
+                        <div class="text-xs text-gray-400">${item.origin}</div>
+                    </div>
+                    <div class="text-xs font-bold text-yellow-600">${item.rarity}</div>
+                </div>
+            `).join('');
+
+            modalContent.innerHTML = `
+                <h2 class="text-2xl font-bold text-amber-500 mb-4">あなたのコレクション</h2>
+                <div class="max-h-60 overflow-y-auto mb-4 bg-gray-800 rounded p-2">
+                    ${listHtml}
+                </div>
+            `;
+            modal.classList.remove('hidden');
+        }
+
+        // Recovery system
+        setInterval(() => {
+            if (gameState.energy < gameState.maxEnergy) {
+                gameState.energy = Math.min(gameState.maxEnergy, gameState.energy + 2);
+                updateUI();
+            }
+        }, 5000);
+
+        // Listeners
+        exploreButtons.forEach(button => {
+            button.onclick = () => explore(button.dataset.exploreMode);
+        });
+        showCollectionBtn.onclick = showCollection;
+        modalClose.onclick = () => modal.classList.add('hidden');
+        
+        window.onload = initMap;
+    </script>
+</body>
+</html>
